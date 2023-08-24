@@ -1,0 +1,91 @@
+version: '3.9'
+name: inlaze_glpi
+services:
+  db:
+    image: mysql:5.7.42-debian
+    user: "${UID}:${GID}"
+    restart: always
+    env_file:
+      - ../../.env-mysql
+    volumes:
+      - type: bind
+        source: ../../init.sql
+        target: /docker-entrypoint-initdb.d/init.sql
+        bind:
+          propagation: rprivate
+      - type: bind
+        source: ../../mysql
+        target: /var/lib/mysql
+        bind:
+          propagation: rprivate
+    ports:
+      - target: 3306
+        published: "${MYSQL_PORT}"
+        protocol: tcp
+        mode: host
+  glpi:
+    build:
+      context: ../../
+      dockerfile: docker/master/glpi.Dockerfile
+    image: "${DOCKER_REGISTRY}glpi_inlaze"
+    restart: always
+    user: "${UID}:${GID}"
+    env_file:
+      - ../../.env-glpi
+    depends_on:
+      - db
+    volumes:
+      - type: bind
+        source: ../../glpi/www/glpi
+        target: /var/www/glpi
+        bind:
+          propagation: rprivate
+      - type: bind
+        source: ../../glpi/php/conf.d/opcache.ini
+        target: /usr/local/etc/php/conf.d/opcache.ini
+        bind:
+          propagation: rprivate
+      - type: bind
+        source: ../../glpi/php/php.ini
+        target: /usr/local/etc/php/php.ini
+        bind:
+          propagation: rprivate
+      - type: bind
+        source: ../../glpi/etc/glpi
+        target: /etc/glpi
+        bind:
+          propagation: rprivate
+      - type: bind
+        source: ../../glpi/lib/glpi
+        target: /var/lib/glpi
+        bind:
+          propagation: rprivate
+  proxy:
+    image: nginx:1.25.1-alpine3.17
+    restart: always
+    depends_on:
+      - glpi
+    volumes:
+      - type: bind
+        source: ../../proxy/ssl
+        target: /etc/nginx/certs
+        bind:
+          propagation: rprivate
+      - type: bind
+        source: ../../proxy/confs
+        target: /etc/nginx/conf.d
+        bind:
+          propagation: rprivate
+      - type: bind
+        source: ../../glpi/www/glpi
+        target: /var/www/glpi
+        read_only: true
+    ports:
+      - target: 80
+        published: 4202
+        protocol: tcp
+        mode: host
+      - target: 443
+        published: 4203
+        protocol: tcp
+        mode: host
